@@ -1,4 +1,8 @@
-/* Receiver/client multicast Datagram example. */
+/*
+Run:
+    must run the unicast_server first
+	./unicast_client 
+*/
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -7,6 +11,9 @@
 #include <stdlib.h>
 #include <unistd.h> // for close
 #include <string.h> // for memset
+
+#include <netinet/in.h>
+#include <netdb.h>
 
 #include <inttypes.h>
 #include <math.h>
@@ -27,6 +34,12 @@
 #define FEC_N 255
 #define FEC_K 230
 
+#define ERR_EXIT(m) \
+    do { \
+        perror(m); \
+        exit(EXIT_FAILURE); \
+    } while (0)
+
 using fecpp::byte;
 
 struct sendele {
@@ -35,67 +48,44 @@ struct sendele {
     size_t len;
 };
 
+void error(const char *msg);
+
 void decode_function(size_t block, size_t /*max_blocks*/, const byte buf[], size_t size);
 int check_socket_avail(int sd, int sec);
 
 char *result[FEC_K];
 int result_size[FEC_K];
 
-int main() {
-    struct sockaddr_in localSock;
-    struct ip_mreq group;
+int main(int argc, char *argv[]) {
     int sd;
 
-    /* Create a datagram socket on which to receive. */
-    sd = socket(AF_INET, SOCK_DGRAM, 0);
-    if(sd < 0) {
-        perror("Opening datagram socket error");
-        exit(1);
-    } else
-        printf("Opening datagram socket....OK.\n");
+    char sendbuf[1024] = {0};
+    int portno;
+    struct sockaddr_in serv_addr;
+    struct hostent *server;
 
+    portno = atoi(argv[2]);
+    sd = socket(PF_INET, SOCK_DGRAM, 0);
+    if (sd < 0) error("ERROR opening socket");
 
-    /* Enable SO_REUSEADDR to allow multiple instances of this */
-    /* application to receive copies of the multicast datagrams. */
-    //{
-    int reuse = 1;
-    //if(setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(reuse)) < 0)
-    if(setsockopt(sd, SOL_SOCKET, SO_REUSEPORT, (char *)&reuse, sizeof(reuse)) < 0) {
-        perror("Setting SO_REUSEADDR error");
-        close(sd);
-        exit(1);
-    } else
-        printf("Setting SO_REUSEADDR...OK.\n");
-    //}
+    server = gethostbyname(argv[1]);
+    if (server == NULL) {
+        fprintf(stderr,"ERROR, no such host\n");
+        exit(0);
+    }
 
+    struct sockaddr_in servaddr;
+    memset(&servaddr, 0, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(portno);
+    bcopy((char *)server->h_addr, 
+         (char *)&servaddr.sin_addr.s_addr,
+         server->h_length);
 
-    /* Bind to the proper port number with the IP address */
-    /* specified as INADDR_ANY. */
-    memset((char *) &localSock, 0, sizeof(localSock));
-    localSock.sin_family = AF_INET;
-    localSock.sin_port = htons(4321);
-    localSock.sin_addr.s_addr = INADDR_ANY;
-    if(bind(sd, (struct sockaddr*)&localSock, sizeof(localSock))) {
-        perror("Binding datagram socket error");
-        close(sd);
-        exit(1);
-    } else
-        printf("Binding datagram socket...OK.\n");
-
-
-    /* Join the multicast group 226.1.1.1 on the local 203.106.93.94 */
-    /* interface. Note that this IP_ADD_MEMBERSHIP option must be */
-    /* called for each local interface over which the multicast */
-    /* datagrams are to be received. */
-    group.imr_multiaddr.s_addr = inet_addr("226.1.1.1");
-    group.imr_interface.s_addr = inet_addr("192.168.1.103");
-    if(setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0) {
-        perror("Adding multicast group error");
-        close(sd);
-        exit(1);
-    } else
-        printf("Adding multicast group...OK.\n");
-
+    // call the server
+    int n = sendto(sd, sendbuf, strlen(sendbuf), 0, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    if (n < 0) error("ERROR : sendto()");   
+    printf("called\n");
 
 
 
@@ -119,7 +109,8 @@ int main() {
         sboard[i] = 0;
     struct sendele ele;
     do {
-        int n = read(sd, &ele, sizeof(struct sendele));
+        int n = recvfrom(sd, &ele, sizeof(struct sendele), 0, NULL, NULL);
+        if (n == -1 && errno != EINTR) ERR_EXIT("recvfrom");
         if(!n) {
             printf("n = 0\n");
         }
@@ -128,7 +119,7 @@ int main() {
         // Contents of share[] are only valid in this scope, must copy
         byte* share_copy = new byte[share_len];
         memcpy(share_copy, ele.share, share_len);
-        m[ele.block_no] = share_copy;
+        m[ele.block_no] = share_copy; 
         sboard[ele.block_no] = 1;
     } while(check_socket_avail(sd, 1));
 
@@ -167,10 +158,10 @@ int main() {
     int bloss = 0; // block loss count
     for(int i = 0; i < FEC_K; ++i)
         bboard[i] = 0;
-    for(int i = 0; i < FEC_K; ++i) {  
-        if(result_size[i]) { // fwrite the blocks
+    for(int i = 0; i < FEC_K; ++i) {
+        if(result_size[i]) {  // fwrite the blocks
             fwrite(result[i], 1, result_size[i], file);
-        } else {  // print the IDs of lost blocks, and compute ratio
+        } else {   // print the IDs of lost blocks, and compute ratio
             printf("loss: block id = %d\n", i);
             ++bloss;
         }
@@ -210,4 +201,9 @@ int check_socket_avail(int sd, int sec) {
         }
     }
     return ret;
+}
+
+void error(const char *msg) {
+    perror(msg);
+    exit(1);
 }

@@ -163,6 +163,7 @@ int recv_file(int sockfd) {
     n = recvfrom(sockfd, &offset, sizeof(offset), 0, NULL, NULL);
     if (n == -1 && errno != EINTR) ERR_EXIT("recvfrom");
 
+	// int array to record the loss datagrams
 	int *board;
 	int board_size = num_full_chunk;
 	int loss_count = 0;
@@ -178,14 +179,13 @@ int recv_file(int sockfd) {
 		if (recv_n == -1 && errno != EINTR) ERR_EXIT("recvfrom");
 
         // fwrite chunk_buffer to udp_receiver.X
-		// printf("seq num = %d\n", *(int *)(chunk_buffer));
 		int seqnum = *(int *)(chunk_buffer);
 		board[seqnum] = 1;
         fwrite(chunk_buffer + sizeof(int), 1, recv_n - sizeof(int), file);
 
     } while(check_socket_avail(sockfd, 1));
 
-
+	// print the lost datagrams and compute the ratio
 	for(int i = 0; i < board_size; ++i) {
 		if(!board[i]) {
 			printf("unreceived : %d\n", i);

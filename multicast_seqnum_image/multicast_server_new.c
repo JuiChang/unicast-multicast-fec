@@ -93,7 +93,7 @@ void udp_subchunk_size(int file_length, int num_chunk, int *subchunk_size, int *
 
     *subchunk_size = 0;
     *num_subchunk = 1;
-    for (*num_subchunk = 1; (file_length / (num_chunk * *num_subchunk) > 10000); ++*num_subchunk) {
+    for (*num_subchunk = 1; (file_length / (num_chunk * *num_subchunk) > 9000); ++*num_subchunk) {
         ;
     }
     *subchunk_size = file_length / (num_chunk * *num_subchunk);
@@ -154,8 +154,10 @@ int send_file(int sockfd, struct sockaddr_in groupSock, char *file_name) {
 
         // write a file chunk to client 
         int send_size = 0;
+        // concat the sequence number with the data to be sent
         concat_seqnum(seqnum, (void**)&chunk_buffer, &send_size, chunk_buffer, bytes_read);
-        n = sendto(sockfd, chunk_buffer, send_size, 0, (struct sockaddr*)&groupSock, sizeof(groupSock));  
+        n = sendto(sockfd, chunk_buffer, send_size, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)); 
+        printf("send_size = %d\n", send_size); 
         if (n < 0) error("ERROR : sendto() 2");
 
         ++seqnum;

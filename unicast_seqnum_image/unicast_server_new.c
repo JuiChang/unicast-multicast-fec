@@ -152,6 +152,7 @@ int udp_send(int argc, char *argv[]){
 
         // write a file chunk to client 
         int send_size = 0;
+        // concat the sequence number with the data to be sent
         concat_seqnum(seqnum, (void**)&chunk_buffer, &send_size, chunk_buffer, bytes_read);
         n = sendto(sockfd, chunk_buffer, send_size, 0, (struct sockaddr *)&peeraddr, peerlen);  
         if (n < 0) error("ERROR : sendto() 2");   

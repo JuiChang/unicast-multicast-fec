@@ -1,6 +1,6 @@
 /*
 Run:
-	./muticast_server <filename>
+	./unicast_server <filename>
 */
 
 #include <sys/types.h>
@@ -26,6 +26,12 @@ Run:
 #define FEC_N 255
 #define FEC_K 230
 
+#define ERR_EXIT(m) \
+    do { \
+        perror(m); \
+        exit(EXIT_FAILURE); \
+    } while (0)
+
 using fecpp::byte;
 
 // send element (which is sent to client)
@@ -42,50 +48,38 @@ void encode_function(size_t block_no, size_t, const byte share[], size_t len);
 
 int sd;
 struct sockaddr_in groupSock;
-int num_send = 0;
+struct sockaddr_in peeraddr;
+socklen_t peerlen;
 
 
 int main (int argc, char *argv[ ]) {
-    struct in_addr localInterface;
-    // struct sockaddr_in groupSock;
-    // int sd;
-    // char databuf[1024] = "Multicast test message.";
+    int portno;
+    struct sockaddr_in serv_addr;
+    char recvbuf[1024] = {0};  // receiving the first call from client
+
     char *databuf;
-    // int datalen = sizeof(databuf);
 
-    /* Create a datagram socket on which to send. */
-    sd = socket(AF_INET, SOCK_DGRAM, 0);
-    if(sd < 0) {
-        perror("Opening datagram socket error");
-        exit(1);
-    } else
-        printf("Opening the datagram socket...OK.\n");
+    //////// create socket and connect with client
 
+    sd = socket(PF_INET, SOCK_DGRAM, 0);
+    if (sd < 0) error("ERROR opening socket");
+    
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    portno = atoi(argv[2]);
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(portno);
+    if (bind(sd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+        error("ERROR on binding");
+    
+    //////// write & read
 
-    /* Initialize the group sockaddr structure with a */
-    /* group address of 225.1.1.1 and port 5555. */
-    memset((char *) &groupSock, 0, sizeof(groupSock));
-    groupSock.sin_family = AF_INET;
-    groupSock.sin_addr.s_addr = inet_addr("226.1.1.1");
-    groupSock.sin_port = htons(4321);
-
-
-    /* Set local interface for outbound multicast datagrams. */
-    /* The IP address specified must be associated with a local, */
-    /* multicast capable interface. */
-    //localInterface.s_addr = inet_addr("192.168.32.143");
-    localInterface.s_addr = inet_addr("192.168.1.103");
-    if(setsockopt(sd, IPPROTO_IP, IP_MULTICAST_IF, (char *)&localInterface, sizeof(localInterface)) < 0) {
-        perror("Setting local interface error");
-        exit(1);
-    } else
-        printf("Setting the local interface...OK\n");
-
-
-    // send_file(sd, groupSock, argv[1]);
-    /* Send a message to the multicast group specified by the*/
-    /* groupSock sockaddr structure. */
-    /*int datalen = 1024;*/
+    // recv call from client
+    peerlen = sizeof(peeraddr);
+    memset(recvbuf, 0, sizeof(recvbuf));
+    int n = recvfrom(sd, recvbuf, sizeof(recvbuf), 0, (struct sockaddr *)&peeraddr, &peerlen);
+    if (n == -1 && errno != EINTR) ERR_EXIT("recvfrom error");
+    printf("received\n");
 
     int fec_n = FEC_N;
     int fec_k = FEC_K;
@@ -93,17 +87,17 @@ int main (int argc, char *argv[ ]) {
         printf("fec_k >= fec_n\n");
         exit(1);
     }
-    printf("%d %d\n", fec_k, fec_n);
+    printf("k = %d, n = %d\n", fec_k, fec_n);
     printf("sizeof(struct Sendele) = %lu\n", sizeof(struct Sendele));
 
     char file_ext[10];
     int k_offset = 0;
 
     FILE *file;
-    file = fopen(argv[1], "r");
+    file = fopen(argv[3], "r");
     if (!file) error("ERROR : opening file.\n");
     memset(file_ext, 0, sizeof(file_ext));
-    strcpy(file_ext, get_filename_ext(argv[1]));
+    strcpy(file_ext, get_filename_ext(argv[3]));
     // determine file length
     size_t pos = ftell(file);    // Current position
     fseek(file, 0, SEEK_END);    // Go to end
@@ -120,8 +114,7 @@ int main (int argc, char *argv[ ]) {
     databuf = (char *)malloc(datalen);
     memset(databuf, 0, datalen);
     fread(databuf, 1, file_length, file);
-    
-    
+
 
     fecpp::fec_code fec(fec_k, fec_n);
     fec.encode((byte *)databuf, datalen, encode_function); // save content to share_len and shares
@@ -155,6 +148,6 @@ void encode_function(size_t block_no, size_t, const byte share[], size_t len) {
         ele.share[i] = share[i];
     ele.len = len;
 
-    int n = sendto(sd, &ele, sizeof(struct Sendele), 0, (struct sockaddr*)&groupSock, sizeof(groupSock));
+    int n = sendto(sd, &ele, sizeof(struct Sendele), 0, (struct sockaddr *)&peeraddr, peerlen);
     if (n < 0) error("ERROR : sendto()"); 
 }
