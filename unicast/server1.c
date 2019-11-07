@@ -145,20 +145,25 @@ int udp_send(int argc, char *argv[]){
     if (n < 0) error("ERROR : sendto()"); 
     
     int seqnum = 0;
+    int test = 0;
     while (1) {
         // fread a file chunk to chunk_buffer
         memset(chunk_buffer, 0, full_chunk_size);
+        printf("test = %d\n", test++);
         int bytes_read = fread(chunk_buffer, 1, full_chunk_size, file);
+        printf("bytes_read = %d\n", bytes_read);
         if (bytes_read == 0){ 
+            printf("k");
             printf("Sender: File transfer finished.\n");
             break;
         }
 
         // write a file chunk to client 
         int send_size = 0;
+        char *send_buffer;
         // concat the sequence number with the data to be sent
-        concat_seqnum(seqnum, (void**)&chunk_buffer, &send_size, chunk_buffer, bytes_read);
-        n = sendto(sockfd, chunk_buffer, send_size, 0, (struct sockaddr *)&peeraddr, peerlen);  
+        concat_seqnum(seqnum, (void**)&send_buffer, &send_size, chunk_buffer, bytes_read);
+        n = sendto(sockfd, send_buffer, send_size, 0, (struct sockaddr *)&peeraddr, peerlen);  
         if (n < 0) error("ERROR : sendto() 2");   
 
         ++seqnum;

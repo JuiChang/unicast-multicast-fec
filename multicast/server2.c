@@ -153,9 +153,10 @@ int send_file(int sockfd, struct sockaddr_in groupSock, char *file_name) {
 
         // write a file chunk to client 
         int send_size = 0;
+        char *send_buffer;
         // concat the sequence number with the data to be sent
-        concat_seqnum(seqnum, (void**)&chunk_buffer, &send_size, chunk_buffer, bytes_read);
-        n = sendto(sockfd, chunk_buffer, send_size, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)); 
+        concat_seqnum(seqnum, (void**)&send_buffer, &send_size, chunk_buffer, bytes_read);
+        n = sendto(sockfd, send_buffer, send_size, 0, (struct sockaddr*)&groupSock, sizeof(groupSock)); 
         printf("send_size = %d\n", send_size); 
         if (n < 0) error("ERROR : sendto() 2");
 

@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
 	}
 	else
 		printf("Binding datagram socket...OK.\n");
-	 
+	
 
 	/* Join the multicast group 226.1.1.1 on the local 203.106.93.94 */
 	/* interface. Note that this IP_ADD_MEMBERSHIP option must be */
